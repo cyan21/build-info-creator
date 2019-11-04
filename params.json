@@ -1,0 +1,10 @@
+{
+  "log_path" : "./",
+  "log_level":"DEBUG",
+  "res_path" : "./",
+  "art_url" : "",
+  "art_user" : "",
+  "art_pass" : "",
+  "repo" : "",
+  "imageID" : ""
+}
