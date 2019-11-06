@@ -2,6 +2,8 @@ package main
 
 import (
   "fmt"
+  "strconv"
+  "time"
   "os"
   "strings"
   "encoding/json"
@@ -86,12 +88,13 @@ type BuildInfo struct {
 }
 
 func NewBuildInfo (biName string, biNumber string, biStart string, biDuration string, biPrincipal string) *BuildInfo {
-  bi := new(BuildInfo)
 
-  // required params
+  bi := new(BuildInfo)
   bi.Name = biName 
   bi.Number = biNumber 
-  bi.Started = biStart 
+
+  // to fit this pattern : "2014-09-30T12:00:19.893+0300"
+  bi.Started =  strings.Replace(strings.Replace(biStart, " ", "T", -1), "+", ".000+", -1) 
   bi.DurationMillis = biDuration 
   bi.Principal = biPrincipal 
 
@@ -102,7 +105,7 @@ func NewBuildInfo (biName string, biNumber string, biStart string, biDuration st
   return bi 
 }
 
-func (bi * BuildInfo) setModules (moduleName string, buildName string, buildNumber string, buildtimestamp string, arrRes *AQLResult) {
+func (bi * BuildInfo) setModules (moduleName string, buildName string, buildNumber string, buildTimestamp string, arrRes *AQLResult) {
 
   bi.Modules = make([]Module, 1)
   bi.Modules[0].Id = moduleName 
@@ -111,6 +114,8 @@ func (bi * BuildInfo) setModules (moduleName string, buildName string, buildNumb
   bi.Modules[0].Artifacts = make([]Artifact, len((*arrRes).Results))
 
   i:= 0
+  startBi, _ := time.Parse(time.RFC3339, strings.Replace(buildTimestamp, " ", "T", -1))
+  epochMs := strconv.FormatInt(startBi.Unix()*1000, 10)
 
   for _,res  := range arrRes.Results {
     fmt.Println("layer name:", res.Actual_sha1)
@@ -118,7 +123,7 @@ func (bi * BuildInfo) setModules (moduleName string, buildName string, buildNumb
     bi.Modules[0].Artifacts[i].Sha1 = res.Actual_sha1 
     bi.Modules[0].Artifacts[i].Md5 = res.Actual_md5 
     bi.Modules[0].Artifacts[i].Name = res.Name
-    bi.Modules[0].Artifacts[i].Properties = BuildInfoProperty{buildName, buildNumber, buildtimestamp}
+    bi.Modules[0].Artifacts[i].Properties = BuildInfoProperty{buildName, buildNumber, epochMs }
     i++
   }
 }
@@ -138,6 +143,7 @@ type buildInfoCreator struct {
   imageId string
   buildName string
   buildNumber string
+  buildTimestamp string
   rtManager *artifactory.ArtifactoryServicesManager
 }
 
@@ -151,6 +157,8 @@ func NewBuildInfoCreator() *buildInfoCreator {
   bic.imageId = "mvn-greeting/0.0.1"
   bic.buildName = "yann-mvn"
   bic.buildNumber = "99"
+  // expecting result of date --rfc-3339=seconds 
+  bic.buildTimestamp = "2019-11-06 14:14:22+01:00"
 
   // init log file
   file, _ := os.Create("./buildInfoCreator.log")
@@ -209,8 +217,8 @@ func (bic *buildInfoCreator) process() {
     log.Error("Issue while unmarshalling")
   } 
 
-  myBuild := NewBuildInfo(bic.buildName, bic.buildNumber, "2019-11-06T10:00:00.000+0300","360000","yannc")
-  myBuild.setModules(bic.imageId, bic.buildName, bic.buildNumber, "2019-11-06T10:00:00.000+0300", &arrRes)
+  myBuild := NewBuildInfo(bic.buildName, bic.buildNumber, bic.buildTimestamp,"360000","yannc")
+  myBuild.setModules(bic.imageId, bic.buildName, bic.buildNumber, bic.buildTimestamp, &arrRes)
  
   myBuild.print()
 
