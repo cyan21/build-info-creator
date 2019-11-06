@@ -39,9 +39,10 @@ type Module struct {
 } 
 
 type BuildInfoProperty struct {
-  Timestamp string 
-  Number string
-  Name string 
+  Name string `json:"build.name"`
+  Number string `json:"build.number"`
+  Timestamp string `json:"build.timestamp"`
+
 }
 
 type Artifact struct {
@@ -49,7 +50,7 @@ type Artifact struct {
   Sha256 string `json:"sha256"`
   Sha1 string `json:"sha1"`
   Md5 string  `json:"md5"`
-  Properties []BuildInfoProperty `json:"properties"`
+  Properties BuildInfoProperty `json:"properties"`
 }
 
 type BuildAgentInfo struct {
@@ -101,7 +102,7 @@ func NewBuildInfo (biName string, biNumber string, biStart string, biDuration st
   return bi 
 }
 
-func (bi * BuildInfo) setModules (moduleName string, arrRes *AQLResult) {
+func (bi * BuildInfo) setModules (moduleName string, buildName string, buildNumber string, buildtimestamp string, arrRes *AQLResult) {
 
   bi.Modules = make([]Module, 1)
   bi.Modules[0].Id = moduleName 
@@ -117,6 +118,7 @@ func (bi * BuildInfo) setModules (moduleName string, arrRes *AQLResult) {
     bi.Modules[0].Artifacts[i].Sha1 = res.Actual_sha1 
     bi.Modules[0].Artifacts[i].Md5 = res.Actual_md5 
     bi.Modules[0].Artifacts[i].Name = res.Name
+    bi.Modules[0].Artifacts[i].Properties = BuildInfoProperty{buildName, buildNumber, buildtimestamp}
     i++
   }
 }
@@ -134,6 +136,8 @@ func (bi* BuildInfo) print() {
 
 type buildInfoCreator struct {
   imageId string
+  buildName string
+  buildNumber string
   rtManager *artifactory.ArtifactoryServicesManager
 }
 
@@ -145,6 +149,8 @@ func NewBuildInfoCreator() *buildInfoCreator {
 
   bic := new(buildInfoCreator) 
   bic.imageId = "mvn-greeting/0.0.1"
+  bic.buildName = "yann-mvn"
+  bic.buildNumber = "99"
 
   // init log file
   file, _ := os.Create("./buildInfoCreator.log")
@@ -202,9 +208,9 @@ func (bic *buildInfoCreator) process() {
   if err1 != nil {
     log.Error("Issue while unmarshalling")
   } 
- 
-  myBuild := NewBuildInfo("yann-build-info","777","1234567891011","360000","yannc")
-  myBuild.setModules("simple-app:1.0.0",&arrRes)
+
+  myBuild := NewBuildInfo(bic.buildName, bic.buildNumber, "2019-11-06T10:00:00.000+0300","360000","yannc")
+  myBuild.setModules(bic.imageId, bic.buildName, bic.buildNumber, "2019-11-06T10:00:00.000+0300", &arrRes)
  
   myBuild.print()
 
