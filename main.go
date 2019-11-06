@@ -16,6 +16,10 @@ import (
 )
 
 
+const FULL_AQL4DOCKER string = "items.find({'path': { '$match' : 'IMAGE_PATH'}, 'type':'file' }).include('name','sha256', 'actual_sha1', 'actual_md5')"
+ 
+const AQL4DOCKER string = "{'path': { '$match' : 'IMAGE_PATH'}, 'type':'file'}"
+
 ///// AQL 
 
 type Property struct {
@@ -160,7 +164,7 @@ func NewBuildInfoCreator() *buildInfoCreator {
   bic := new(buildInfoCreator) 
   bic.imageId = "mvn-greeting/0.0.1"
   bic.buildName = "yann-mvn"
-  bic.buildNumber = "99"
+  bic.buildNumber = "100"
   // expecting result of date --rfc-3339=seconds 
   bic.buildTimestamp = "2019-11-06 14:14:22+01:00"
 
@@ -190,9 +194,7 @@ func NewBuildInfoCreator() *buildInfoCreator {
   }   
    
   // run AQL query
-  aql_template := "items.find({\"path\": { \"$match\" : \"IMAGE_PATH\"}, \"type\":\"file\" }).include(\"name\",\"sha256\", \"actual_sha1\", \"actual_md5\")"
- 
-  bic.aql = strings.Replace(aql_template, "IMAGE_PATH", bic.imageId, -1) 
+  bic.aql = strings.Replace(strings.Replace(FULL_AQL4DOCKER, "IMAGE_PATH", bic.imageId, -1), "'", "\"", -1)
   log.Debug("AQL query", bic.aql)
 
   log.Debug("Init done")  
@@ -238,11 +240,8 @@ func (bic *buildInfoCreator) process() {
 func (bic *buildInfoCreator) setBuildInfoProps() {
 
   searchParams := services.NewSearchParams()
-//  searchParams.Recursive = true
-//  searchParams.IncludeDirs = false
-  query := utils.Aql{"{\"path\": { \"$match\" : \"mvn-greeting/0.0.1\"}, \"type\":\"file\" }"}
 
-  searchParams.Aql = query 
+  searchParams.Aql = utils.Aql{strings.Replace(strings.Replace(AQL4DOCKER, "'", "\"", -1), "IMAGE_PATH", bic.imageId, -1)}
 
   resultItems, err := bic.rtManager.SearchFiles(searchParams)
 
@@ -252,7 +251,7 @@ func (bic *buildInfoCreator) setBuildInfoProps() {
 
   propsParams := services.NewPropsParams()
   propsParams.Items = resultItems
-  propsParams.Props = "day=monday"
+  propsParams.Props = "day=wednesday"
 
   bic.rtManager.SetProps(propsParams)
 
