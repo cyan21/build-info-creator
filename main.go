@@ -10,8 +10,11 @@ import (
   "io/ioutil"
   "github.com/jfrog/jfrog-client-go/utils/log"
   "github.com/jfrog/jfrog-client-go/artifactory"
+  "github.com/jfrog/jfrog-client-go/artifactory/services"
+  utils "github.com/jfrog/jfrog-client-go/artifactory/services/utils"
   "github.com/jfrog/jfrog-client-go/artifactory/auth"
 )
+
 
 ///// AQL 
 
@@ -144,6 +147,7 @@ type buildInfoCreator struct {
   buildName string
   buildNumber string
   buildTimestamp string
+  aql string
   rtManager *artifactory.ArtifactoryServicesManager
 }
 
@@ -185,23 +189,22 @@ func NewBuildInfoCreator() *buildInfoCreator {
     fmt.Println("Issue while initializing the connection to Artifactory")
   }   
    
+  // run AQL query
+  aql_template := "items.find({\"path\": { \"$match\" : \"IMAGE_PATH\"}, \"type\":\"file\" }).include(\"name\",\"sha256\", \"actual_sha1\", \"actual_md5\")"
+ 
+  bic.aql = strings.Replace(aql_template, "IMAGE_PATH", bic.imageId, -1) 
+  log.Debug("AQL query", bic.aql)
+
   log.Debug("Init done")  
 
   return bic 
 }
 
 func (bic *buildInfoCreator) process() {
-  fmt.Println("process method")
-  log.Debug("process method")  
 
   var arrRes AQLResult
 
-  // run AQL query
-  aql_template := "items.find({\"path\": { \"$match\" : \"IMAGE_PATH\"}, \"type\":\"file\" }).include(\"name\",\"sha256\", \"actual_sha1\", \"actual_md5\")"
- 
-  aql := strings.Replace(aql_template, "IMAGE_PATH", bic.imageId, -1) 
-  log.Debug("AQL query", aql)
-  toParse, aql_err := bic.rtManager.Aql(aql)
+  toParse, aql_err := bic.rtManager.Aql(bic.aql)
 
   fmt.Println("AQL result", string(toParse))
 
@@ -232,6 +235,29 @@ func (bic *buildInfoCreator) process() {
   fmt.Println("imageID:",bic.imageId)
 }
 
+func (bic *buildInfoCreator) setBuildInfoProps() {
+
+  searchParams := services.NewSearchParams()
+//  searchParams.Recursive = true
+//  searchParams.IncludeDirs = false
+  query := utils.Aql{"{\"path\": { \"$match\" : \"mvn-greeting/0.0.1\"}, \"type\":\"file\" }"}
+
+  searchParams.Aql = query 
+
+  resultItems, err := bic.rtManager.SearchFiles(searchParams)
+
+  if err != nil {
+    fmt.Println(err)
+  } 
+
+  propsParams := services.NewPropsParams()
+  propsParams.Items = resultItems
+  propsParams.Props = "day=monday"
+
+  bic.rtManager.SetProps(propsParams)
+
+}
+
 func (*buildInfoCreator) publish() {
   fmt.Println("publish method")
   log.Debug("publish method")  
@@ -246,5 +272,5 @@ func main() {
 
   var bc = NewBuildInfoCreator()
   bc.process()
-
+  bc.setBuildInfoProps()
 }
