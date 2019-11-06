@@ -1,4 +1,4 @@
-module github.com/cyan21/build-info-builder
+module github.com/cyan21/build-info-creator
 
 go 1.13
 
