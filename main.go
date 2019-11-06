@@ -3,6 +3,7 @@ package main
 import (
   "fmt"
   "strconv"
+  "bytes"
   "time"
   "os"
   "strings"
@@ -19,6 +20,7 @@ import (
 const FULL_AQL4DOCKER string = "items.find({'path': { '$match' : 'IMAGE_PATH'}, 'type':'file' }).include('name','sha256', 'actual_sha1', 'actual_md5')"
  
 const AQL4DOCKER string = "{'path': { '$match' : 'IMAGE_PATH'}, 'type':'file'}"
+const TIMESTAMP_FORMAT string = "2006-01-02T15:04:05.000Z07:00"
 
 ///// AQL 
 
@@ -100,8 +102,9 @@ func NewBuildInfo (biName string, biNumber string, biStart string, biDuration st
   bi.Name = biName 
   bi.Number = biNumber 
 
-  // to fit this pattern : "2014-09-30T12:00:19.893+0300"
-  bi.Started =  strings.Replace(strings.Replace(biStart, " ", "T", -1), "+", ".000+", -1) 
+//  fmt.Println("[NewBuildInfo] biStart: ", biStart)
+  bi.Started =  biStart 
+//  fmt.Println("[NewBuildInfo] bi.Started: ", bi.Started)
   bi.DurationMillis = biDuration 
   bi.Principal = biPrincipal 
 
@@ -121,11 +124,10 @@ func (bi * BuildInfo) setModules (moduleName string, buildName string, buildNumb
   bi.Modules[0].Artifacts = make([]Artifact, len((*arrRes).Results))
 
   i:= 0
-  startBi, _ := time.Parse(time.RFC3339, strings.Replace(buildTimestamp, " ", "T", -1))
+  startBi, _ := time.Parse(time.RFC3339, buildTimestamp)
   epochMs := strconv.FormatInt(startBi.Unix()*1000, 10)
 
   for _,res  := range arrRes.Results {
-    fmt.Println("layer name:", res.Actual_sha1)
     bi.Modules[0].Artifacts[i].Sha256 = res.Sha256 
     bi.Modules[0].Artifacts[i].Sha1 = res.Actual_sha1 
     bi.Modules[0].Artifacts[i].Md5 = res.Actual_md5 
@@ -164,9 +166,14 @@ func NewBuildInfoCreator() *buildInfoCreator {
   bic := new(buildInfoCreator) 
   bic.imageId = "mvn-greeting/0.0.1"
   bic.buildName = "yann-mvn"
-  bic.buildNumber = "100"
+  bic.buildNumber = "101"
   // expecting result of date --rfc-3339=seconds 
-  bic.buildTimestamp = "2019-11-06 14:14:22+01:00"
+  biTimestamp := "2019-11-06 14:14:22+01:00"
+  tmpTS, _ := time.Parse(time.RFC3339, strings.Replace(biTimestamp, " ", "T", -1))
+  bic.buildTimestamp = tmpTS.Format(TIMESTAMP_FORMAT)
+  
+//  fmt.Println("[NewBuildInfoCreator] tmpTS: ", tmpTS)
+//  fmt.Println("[NewBuildInfoCreator] bic.buildTimestamp: ", bic.buildTimestamp)
 
   // init log file
   file, _ := os.Create("./buildInfoCreator.log")
@@ -208,7 +215,7 @@ func (bic *buildInfoCreator) process() {
 
   toParse, aql_err := bic.rtManager.Aql(bic.aql)
 
-  fmt.Println("AQL result", string(toParse))
+//  fmt.Println("AQL result", string(toParse))
 
   if aql_err != nil {
     log.Error(aql_err)
@@ -216,16 +223,16 @@ func (bic *buildInfoCreator) process() {
 
   err1 := json.Unmarshal(toParse, &arrRes)
 
-  fmt.Println(arrRes)
+//  fmt.Println(arrRes)
 
   if err1 != nil {
     log.Error("Issue while unmarshalling")
   } 
 
-  myBuild := NewBuildInfo(bic.buildName, bic.buildNumber, bic.buildTimestamp,"360000","yannc")
+  myBuild := NewBuildInfo(bic.buildName, bic.buildNumber, bic.buildTimestamp, "360000", "yannc")
   myBuild.setModules(bic.imageId, bic.buildName, bic.buildNumber, bic.buildTimestamp, &arrRes)
  
-  myBuild.print()
+//  myBuild.print()
 
   buildinfo_json, _ := json.MarshalIndent(myBuild, "", " ")
 
@@ -234,10 +241,20 @@ func (bic *buildInfoCreator) process() {
   _ = ioutil.WriteFile("buildinfo.json", buildinfo_json, 0644)
 
   // set result in BuildInfo
-  fmt.Println("imageID:",bic.imageId)
+//  fmt.Println("imageID:",bic.imageId)
 }
 
 func (bic *buildInfoCreator) setBuildInfoProps() {
+
+  var buffer bytes.Buffer
+  tmpTS, _ := time.Parse(time.RFC3339, bic.buildTimestamp)
+
+  buffer.WriteString("build.name=")
+  buffer.WriteString(bic.buildName)
+  buffer.WriteString(";build.number=")
+  buffer.WriteString(bic.buildNumber)
+  buffer.WriteString(";build.timestamp=")
+  buffer.WriteString(strconv.FormatInt(tmpTS.Unix()*1000, 10))
 
   searchParams := services.NewSearchParams()
 
@@ -251,7 +268,7 @@ func (bic *buildInfoCreator) setBuildInfoProps() {
 
   propsParams := services.NewPropsParams()
   propsParams.Items = resultItems
-  propsParams.Props = "day=wednesday"
+  propsParams.Props = buffer.String() 
 
   bic.rtManager.SetProps(propsParams)
 
