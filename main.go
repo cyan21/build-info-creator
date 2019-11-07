@@ -1,14 +1,15 @@
 package main 
 
 import (
-  "fmt"
-  "strconv"
   "bytes"
-  "time"
+  "encoding/json"
+  "fmt"
+  "io/ioutil"
+  "net/http"
   "os"
   "strings"
-  "encoding/json"
-  "io/ioutil"
+  "strconv"
+  "time"
   "github.com/jfrog/jfrog-client-go/utils/log"
   "github.com/jfrog/jfrog-client-go/artifactory"
   "github.com/jfrog/jfrog-client-go/artifactory/services"
@@ -150,6 +151,9 @@ func (bi* BuildInfo) print() {
 
 type buildInfoCreator struct {
   imageId string
+  artUrl string
+  artUser string
+  artPass string
   buildName string
   buildNumber string
   buildTimestamp string
@@ -173,6 +177,9 @@ func NewBuildInfoCreator(buildName string, buildNumber string, buildTimestamp st
   } 
 
   //bic := new(buildInfoCreator) 
+  bic.artUrl = os.Getenv("ART_URL")
+  bic.artUser = os.Getenv("ART_USER")
+  bic.artPass =os.Getenv("ART_PASS")
   bic.imageId = imageId 
   bic.buildName = buildName 
   bic.buildNumber = buildNumber 
@@ -224,7 +231,7 @@ func NewBuildInfoCreator(buildName string, buildNumber string, buildTimestamp st
   return bic 
 }
 
-func (bic *buildInfoCreator) process() {
+func (bic *buildInfoCreator) generateBuildInfo() {
 
   var arrRes AQLResult
 
@@ -289,10 +296,35 @@ func (bic *buildInfoCreator) setBuildInfoProps() {
 
 }
 
-func (*buildInfoCreator) publish() {
-  fmt.Println("publish method")
-  log.Debug("publish method")  
-  // hit on Artifactory Rest API  
+func (bic *buildInfoCreator) publishBuildInfo() {
+
+  // reading build info file
+  jsonFile, err := os.Open("buildinfo.json")
+  if err != nil {
+    log.Error("couldn't opened buildinfo.json", err)
+  }
+  defer jsonFile.Close()
+  byteValue, _ := ioutil.ReadAll(jsonFile)
+  
+  // preparing HTTP request
+  client := &http.Client{}
+  req, err := http.NewRequest("PUT", bic.artUrl + "api/build", bytes.NewBuffer(byteValue))
+
+  if err != nil {
+    log.Error("error occured when creating HTTP request", err)
+  }
+  req.Header.Set("Content-Type", "application/json")
+  req.SetBasicAuth(bic.artUser, bic.artPass)
+
+  resp, err := client.Do(req)
+
+  fmt.Println(resp)
+
+  if err != nil {
+    log.Error("error occured when sending HTTP request", err)
+  } else {
+    log.Info("Published BuildInfo successfully :", resp.Status)
+  }
 }
 
 
@@ -306,9 +338,6 @@ func usage() {
   fmt.Println("\t imageID : imageName/tag Not imageName:tag")
 }
 
-// example :
-// go run main.go yann-build-info 103 "2019-11-06 14:14:22+01:00" mvn-greeting/0.0.1
-
 func main() {
 
   if len(os.Args) < 5 {
@@ -318,6 +347,7 @@ func main() {
   } 
 
   var bc = NewBuildInfoCreator(os.Args[1], os.Args[2], os.Args[3], os.Args[4])
-  bc.process()
+  bc.generateBuildInfo()
   bc.setBuildInfoProps()
+  bc.publishBuildInfo()
 }
