@@ -15,16 +15,11 @@
 
 ```
 
-2. update the imageID (line 147) 
+2. in the folder, run 
 
 ```
-  bic.imageId = "mvn-greeting/0.0.1"
+$ go run main.go yann-build-info 103 "2019-11-06 14:14:22+01:00" mvn-greeting/0.0.1
 ```
 
-in the folder, run 
-
-```
-$ go run main.go
-```
 it should pull Go modules (dependencies) and generate a buildinfo.json
 
