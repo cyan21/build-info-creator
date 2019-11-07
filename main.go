@@ -1,4 +1,4 @@
-package main
+package main 
 
 import (
   "fmt"
@@ -157,16 +157,18 @@ type buildInfoCreator struct {
   rtManager *artifactory.ArtifactoryServicesManager
 }
 
-func NewBuildInfoCreator() *buildInfoCreator {
+
+
+func NewBuildInfoCreator(buildName string, buildNumber string, buildTimestamp string, imageId string) *buildInfoCreator {
   
   var err1 error
 
   // read param file and extract data
 
   bic := new(buildInfoCreator) 
-  bic.imageId = "mvn-greeting/0.0.1"
-  bic.buildName = "yann-mvn"
-  bic.buildNumber = "101"
+  bic.imageId = imageId 
+  bic.buildName = buildName 
+  bic.buildNumber = buildNumber 
   // expecting result of date --rfc-3339=seconds 
   biTimestamp := "2019-11-06 14:14:22+01:00"
   tmpTS, _ := time.Parse(time.RFC3339, strings.Replace(biTimestamp, " ", "T", -1))
@@ -283,10 +285,26 @@ func (*buildInfoCreator) publish() {
 
 /////////////////////////////////////////// 
 
+func usage() {
+  fmt.Println("[USAGE] ", os.Args[0], " buildName buildNumber buildTimestamp imageID")
+  fmt.Println("\t buildName : any string")
+  fmt.Println("\t buildNumber : any number")
+  fmt.Println("\t buildTimestamp : formatted following 'date --rfc-3339=seconds' command")
+  fmt.Println("\t imageID : imageName/tag Not imageName:tag")
+}
+
+// example :
+// go run main.go yann-build-info 103 "2019-11-06 14:14:22+01:00" mvn-greeting/0.0.1
 
 func main() {
 
-  var bc = NewBuildInfoCreator()
+  if len(os.Args) < 5 {
+     fmt.Println("[ERROR] missing parameters") 
+     usage()
+     os.Exit(2)
+  } 
+
+  var bc = NewBuildInfoCreator(os.Args[1], os.Args[2], os.Args[3], os.Args[4])
   bc.process()
-  bc.setBuildInfoProps()
+/  bc.setBuildInfoProps()
 }
