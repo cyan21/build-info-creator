@@ -162,30 +162,43 @@ type buildInfoCreator struct {
 func NewBuildInfoCreator(buildName string, buildNumber string, buildTimestamp string, imageId string) *buildInfoCreator {
   
   var err1 error
+  var bic *buildInfoCreator 
+  
+  // check env variable for connection to Artifactory
+  if os.Getenv("ART_URL") != "" && os.Getenv("ART_USER") != "" && os.Getenv("ART_PASS") != "" {  
+    bic = new(buildInfoCreator) 
+  } else {
+    fmt.Println("[ERROR] ART_URL, ART_USER, ART_PASS are required environment variables !")
+    os.Exit(2)
+  } 
 
-  // read param file and extract data
-
-  bic := new(buildInfoCreator) 
+  //bic := new(buildInfoCreator) 
   bic.imageId = imageId 
   bic.buildName = buildName 
   bic.buildNumber = buildNumber 
   // expecting result of date --rfc-3339=seconds 
-  biTimestamp := "2019-11-06 14:14:22+01:00"
+  biTimestamp := buildTimestamp 
   tmpTS, _ := time.Parse(time.RFC3339, strings.Replace(biTimestamp, " ", "T", -1))
   bic.buildTimestamp = tmpTS.Format(TIMESTAMP_FORMAT)
   
-//  fmt.Println("[NewBuildInfoCreator] tmpTS: ", tmpTS)
-//  fmt.Println("[NewBuildInfoCreator] bic.buildTimestamp: ", bic.buildTimestamp)
-
   // init log file
   file, _ := os.Create("./buildInfoCreator.log")
-  log.SetLogger(log.NewLogger(log.DEBUG, file))
+
+  if os.Getenv("LOG_LEVEL") != "" {   
+    switch os.Getenv("LOG_LEVEL") {
+      case "ERROR": log.SetLogger(log.NewLogger(log.ERROR, file))
+      case "DEBUG": log.SetLogger(log.NewLogger(log.DEBUG, file))
+      default: log.SetLogger(log.NewLogger(log.INFO, file))
+    }
+  } else {
+    log.SetLogger(log.NewLogger(log.INFO, file))
+  }
 
   // set up connection to Artifactory
   rtDetails := auth.NewArtifactoryDetails()
-  rtDetails.SetUrl("http://192.168.51.51:8081/artifactory/")
-  rtDetails.SetUser("admin")
-  rtDetails.SetPassword("password")
+  rtDetails.SetUrl(os.Getenv("ART_URL"))
+  rtDetails.SetUser(os.Getenv("ART_USER"))
+  rtDetails.SetPassword(os.Getenv("ART_PASS"))
 
   serviceConfig, err := artifactory.NewConfigBuilder().
     SetArtDetails(rtDetails).
@@ -306,5 +319,5 @@ func main() {
 
   var bc = NewBuildInfoCreator(os.Args[1], os.Args[2], os.Args[3], os.Args[4])
   bc.process()
-/  bc.setBuildInfoProps()
+  bc.setBuildInfoProps()
 }
