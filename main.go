@@ -47,7 +47,7 @@ type AQLResult struct {
 type Module struct {
   Id string `json:"id"`
   Artifacts []Artifact `json:"artifacts"`
-  Dependencies []Artifact `json:"dependencies"`
+  Dependencies []Dependency `json:"dependencies"`
 } 
 
 type BuildInfoProperty struct {
@@ -63,6 +63,13 @@ type Artifact struct {
   Sha1 string `json:"sha1"`
   Md5 string  `json:"md5"`
   Properties BuildInfoProperty `json:"properties"`
+}
+
+type Dependency struct {
+  Id string `json:"id"`
+  Sha256 string `json:"sha256"`
+  Sha1 string `json:"sha1"`
+  Md5 string  `json:"md5"`
 }
 
 type BuildAgentInfo struct {
@@ -138,6 +145,19 @@ func (bi * BuildInfo) setModules (moduleName string, buildName string, buildNumb
   }
 }
 
+func (bi * BuildInfo) setBuildDeps (arrDeps *AQLResult) {
+
+  bi.Modules[0].Dependencies = make([]Dependency, len((*arrDeps).Results))
+  for i := 0; i < len((*arrDeps).Results); i++ {
+    bi.Modules[0].Dependencies[i].Sha256 = (*arrDeps).Results[i].Sha256 
+    bi.Modules[0].Dependencies[i].Sha1 =   (*arrDeps).Results[i].Actual_sha1 
+    bi.Modules[0].Dependencies[i].Md5 =    (*arrDeps).Results[i].Actual_md5 
+    bi.Modules[0].Dependencies[i].Id =   (*arrDeps).Results[i].Name
+  }
+  
+}
+
+
 func (bi* BuildInfo) print() {
 
   for _,res  := range bi.Modules[0].Artifacts {
@@ -158,12 +178,13 @@ type buildInfoCreator struct {
   buildNumber string
   buildTimestamp string
   aql string
+  deps string
   rtManager *artifactory.ArtifactoryServicesManager
 }
 
 
 
-func NewBuildInfoCreator(buildName string, buildNumber string, buildTimestamp string, imageId string) *buildInfoCreator {
+func NewBuildInfoCreator(buildName string, buildNumber string, buildTimestamp string, imageId string, deps string) *buildInfoCreator {
   
   var err1 error
   var bic *buildInfoCreator 
@@ -183,6 +204,7 @@ func NewBuildInfoCreator(buildName string, buildNumber string, buildTimestamp st
   bic.imageId = imageId 
   bic.buildName = buildName 
   bic.buildNumber = buildNumber 
+  bic.deps = deps
   // expecting result of date --rfc-3339=seconds 
   biTimestamp := buildTimestamp 
   tmpTS, _ := time.Parse(time.RFC3339, strings.Replace(biTimestamp, " ", "T", -1))
@@ -233,10 +255,10 @@ func NewBuildInfoCreator(buildName string, buildNumber string, buildTimestamp st
 
 func (bic *buildInfoCreator) generateBuildInfo() {
 
-  var arrRes AQLResult
+  var arrRes, arrDeps AQLResult
 
+  // Get docker layers of an image
   toParse, aql_err := bic.rtManager.Aql(bic.aql)
-
 //  fmt.Println("AQL result", string(toParse))
 
   if aql_err != nil {
@@ -245,19 +267,29 @@ func (bic *buildInfoCreator) generateBuildInfo() {
 
   err1 := json.Unmarshal(toParse, &arrRes)
 
-//  fmt.Println(arrRes)
-
   if err1 != nil {
     log.Error("Issue while unmarshalling")
   } 
 
+//  fmt.Println(buildAQLDeps(bic.deps))
+  toParse, aql_err = bic.rtManager.Aql(buildAQLDeps(bic.deps))
+  if aql_err != nil {
+    log.Error(aql_err)
+  }
+
+  err1 = json.Unmarshal(toParse, &arrDeps)
+
+  if err1 != nil {
+    log.Error("Issue while unmarshalling")
+  } 
+   
   myBuild := NewBuildInfo(bic.buildName, bic.buildNumber, bic.buildTimestamp, "360000", "yannc")
   myBuild.setModules(bic.imageId, bic.buildName, bic.buildNumber, bic.buildTimestamp, &arrRes)
- 
+  myBuild.setBuildDeps(&arrDeps) 
+
 //  myBuild.print()
 
   buildinfo_json, _ := json.MarshalIndent(myBuild, "", " ")
-
 //  fmt.Println(buildinfo_json)
 
   _ = ioutil.WriteFile("buildinfo.json", buildinfo_json, 0644)
@@ -327,6 +359,30 @@ func (bic *buildInfoCreator) publishBuildInfo() {
   }
 }
 
+func buildAQLDeps(deps string) string {
+
+  arrDeps := strings.Split(deps, ",")
+  var buffer bytes.Buffer
+  buffer.WriteString("items.find({\"$or\": [")
+
+  // Build AQL query 
+  /* ========================================
+    items.find({
+      "$or": [
+        { "name": {"$eq" : "Carefirst.jpg"}},
+        { "name": {"$eq" : "artifactory-papi-6.1.0.jar"}}
+      ]
+    }).include("sha256","actual_sha1","actual_md5","name")
+   ===========================================*/
+
+  for i := 0; i < len(arrDeps); i++ {
+    buffer.WriteString("{ \"name\": {\"$eq\" : \"" + arrDeps[i] + "\"}},")
+  }
+
+  aql := strings.TrimSuffix(buffer.String(), ",")
+  aql += "]}).include(\"sha256\",\"actual_sha1\",\"actual_md5\",\"name\")"
+  return aql
+}
 
 /////////////////////////////////////////// 
 
@@ -336,17 +392,18 @@ func usage() {
   fmt.Println("\t buildNumber : any number")
   fmt.Println("\t buildTimestamp : formatted following 'date --rfc-3339=seconds' command")
   fmt.Println("\t imageID : imageName/tag Not imageName:tag")
+  fmt.Println("\t dependencies : artifact names separated by comma")
 }
 
 func main() {
 
-  if len(os.Args) < 5 {
+  if len(os.Args) < 6 {
      fmt.Println("[ERROR] missing parameters") 
      usage()
      os.Exit(2)
   } 
 
-  var bc = NewBuildInfoCreator(os.Args[1], os.Args[2], os.Args[3], os.Args[4])
+  var bc = NewBuildInfoCreator(os.Args[1], os.Args[2], os.Args[3], os.Args[4], os.Args[5])
   bc.generateBuildInfo()
   bc.setBuildInfoProps()
   bc.publishBuildInfo()
