@@ -49,6 +49,8 @@ $ ts=$(date --rfc-3339=seconds); bic yann-build-info 104 "$ts" mvn-greeting/0.0.
 
 # TO DO 
 
-> improve logging
-> use JFrog CLI go client to manage Build Info creation
-> improve param management : Artifactory params are passed via env variables, Build Info params passed as arguments + need to fill other Build info field 
+* improve logging
+* use JFrog CLI go client to manage Build Info creation
+* improve param management : 
+  * Artifactory params are passed via env variables
+  * Build Info params passed as arguments + need to fill other Build info field 
