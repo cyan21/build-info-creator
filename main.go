@@ -272,21 +272,24 @@ func (bic *buildInfoCreator) generateBuildInfo() {
   } 
 
 //  fmt.Println(buildAQLDeps(bic.deps))
-  toParse, aql_err = bic.rtManager.Aql(buildAQLDeps(bic.deps))
-  if aql_err != nil {
-    log.Error(aql_err)
-  }
+  if bic.deps != "" {
+    toParse, aql_err = bic.rtManager.Aql(buildAQLDeps(bic.deps))
+    if aql_err != nil {
+      log.Error(aql_err)
+    }
 
-  err1 = json.Unmarshal(toParse, &arrDeps)
+    err1 = json.Unmarshal(toParse, &arrDeps)
 
-  if err1 != nil {
-    log.Error("Issue while unmarshalling")
+    if err1 != nil {
+      log.Error("Issue while unmarshalling")
+    } 
   } 
-   
+
   myBuild := NewBuildInfo(bic.buildName, bic.buildNumber, bic.buildTimestamp, "360000", "yannc")
   myBuild.setModules(bic.imageId, bic.buildName, bic.buildNumber, bic.buildTimestamp, &arrRes)
-  myBuild.setBuildDeps(&arrDeps) 
-
+  if bic.deps != "" {
+    myBuild.setBuildDeps(&arrDeps) 
+  }
 //  myBuild.print()
 
   buildinfo_json, _ := json.MarshalIndent(myBuild, "", " ")
@@ -397,13 +400,17 @@ func usage() {
 
 func main() {
 
-  if len(os.Args) < 6 {
+  deps := "" 
+
+  if len(os.Args) < 5 {
      fmt.Println("[ERROR] missing parameters") 
      usage()
      os.Exit(2)
   } 
 
-  var bc = NewBuildInfoCreator(os.Args[1], os.Args[2], os.Args[3], os.Args[4], os.Args[5])
+  if len(os.Args) == 6 { deps = os.Args[5] }
+
+  var bc = NewBuildInfoCreator(os.Args[1], os.Args[2], os.Args[3], os.Args[4], deps)
   bc.generateBuildInfo()
   bc.setBuildInfoProps()
   bc.publishBuildInfo()
