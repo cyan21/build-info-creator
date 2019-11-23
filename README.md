@@ -8,9 +8,9 @@
 Set the following environment variables 
 
 ```
-  ART_URL="http://192.168.51.51:8081/artifactory/")
-  ART_USER="admin"
-  ART_PASS="password"
+$ export ART_URL="http://192.168.51.51:8081/artifactory/" \
+  ART_USER="admin" \
+  ART_PASS="password" \
   LOG_LEVEL="DEBUG"
 ```
 # Workflow 
@@ -31,7 +31,7 @@ Set the following environment variables
 
 Run :
 ```
-$ ts=$(date --rfc-3339=seconds); go run main.go yann-build-info 104 "$ts" mvn-greeting/0.0.1
+$ ts=$(date --rfc-3339=seconds); go run main.go yann-build-info 104 "$ts" mvn-greeting/0.0.1 "cve.json,binaries.jpg"
 ```
 
 # Generate the exec 
@@ -43,5 +43,12 @@ $ go build -o bic main.go
 
 To test it :
 ```
-$ ts=$(date --rfc-3339=seconds); bic yann-build-info 104 "$ts" mvn-greeting/0.0.1
+$ ts=$(date --rfc-3339=seconds); bic yann-build-info 104 "$ts" mvn-greeting/0.0.1 "cve.json,binaries.jpg"
+
 ```
+
+# TO DO 
+
+> improve logging
+> use JFrog CLI go client to manage Build Info creation
+> improve param management : Artifactory params are passed via env variables, Build Info params passed as arguments + need to fill other Build info field 
