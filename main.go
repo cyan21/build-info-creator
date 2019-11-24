@@ -42,6 +42,16 @@ type AQLResult struct {
   Results []Result
 }
 
+type BuildResult struct {
+  BuildName string  `json:"build.name"`
+  BuildNumber string `json:"build.number"`
+  BuildCreated string `json:"build.created"`
+}
+
+type AQLBuildResult struct {
+  Results []BuildResult
+}
+
 ///// BuildInfo
 
 type Module struct {
@@ -164,11 +174,15 @@ func (bi * BuildInfo) setBuildDeps (arrDeps *AQLResult) {
   
 }
 
-func (bi *BuildInfo) addChildBuild() {
-  bi.BuildDependencies = make([]BuildDep, 1)
-  bi.BuildDependencies[0].Name = "rpm_build_info" 
-  bi.BuildDependencies[0].Number = "1" 
-  bi.BuildDependencies[0].Started = "2019-05-29T18:33:25.712+0200"
+func (bi *BuildInfo) addChildBuild(arrBuild * []BuildResult) {
+  bi.BuildDependencies = make([]BuildDep, len(*arrBuild))
+fmt.Println("len: ", len(*arrBuild),"; cap: ", cap(*arrBuild))
+
+  for i := 0; i < len(*arrBuild); i++ {
+    bi.BuildDependencies[i].Name = (*arrBuild)[i].BuildName 
+    bi.BuildDependencies[i].Number = (*arrBuild)[i].BuildNumber  
+    bi.BuildDependencies[i].Started = (*arrBuild)[i].BuildCreated
+  }
 }
 
 
@@ -273,7 +287,6 @@ func (bic *buildInfoCreator) generateBuildInfo() {
 
   // Get docker layers of an image
   toParse, aql_err := bic.rtManager.Aql(bic.aql)
-//  fmt.Println("AQL result", string(toParse))
 
   if aql_err != nil {
     log.Error(aql_err)
@@ -285,8 +298,8 @@ func (bic *buildInfoCreator) generateBuildInfo() {
     log.Error("Issue while unmarshalling")
   } 
 
-//  fmt.Println(buildAQLDeps(bic.deps))
   if bic.deps != "" {
+
     toParse, aql_err = bic.rtManager.Aql(buildAQLDeps(bic.deps))
     if aql_err != nil {
       log.Error(aql_err)
@@ -301,11 +314,36 @@ func (bic *buildInfoCreator) generateBuildInfo() {
 
   myBuild := NewBuildInfo(bic.buildName, bic.buildNumber, bic.buildTimestamp, "360000", "yannc")
   myBuild.setModules(bic.imageId, bic.buildName, bic.buildNumber, bic.buildTimestamp, &arrRes)
-  if bic.deps != "" {
-    myBuild.setBuildDeps(&arrDeps) 
-  }
 
-  myBuild.addChildBuild() 
+  if bic.deps != "" {
+    // add Build dependency
+    myBuild.setBuildDeps(&arrDeps) 
+
+    // check if Build Dependency is the result of another Build Info
+    aql_start := "builds.find({\"module.artifact.name\": \""
+    var aqlRes AQLBuildResult 
+    arrBuildDeps := strings.Split(bic.deps, ",") 
+    aqlBuildResult := make([]BuildResult, 0)
+
+    for i := 0; i < len(arrBuildDeps); i++ {
+
+      aql := aql_start + arrBuildDeps[i] + "\"}).include(\"name\",\"number\",\"created\")"
+      toParse, aql_err = bic.rtManager.Aql(aql)
+      err1 = json.Unmarshal(toParse, &aqlRes)
+
+      if len(aqlRes.Results) > 0 {
+        fmt.Println(aqlRes.Results[0].BuildName) 
+        aqlBuildResult = append(aqlBuildResult, BuildResult{ aqlRes.Results[0].BuildName, aqlRes.Results[0].BuildNumber, aqlRes.Results[0].BuildCreated })
+      }
+    } 
+    
+    if len(aqlBuildResult) > 0 {
+//      fmt.Println("found Build Info result")
+//      fmt.Println(aqlBuildResult)
+      myBuild.addChildBuild(&aqlBuildResult) 
+    }
+  } 
+
 
 //  myBuild.print()
 
