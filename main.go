@@ -82,6 +82,11 @@ type VcsInfo struct {
   revision string
 }
 
+type BuildDep struct {
+  Name string `json:"name"`
+  Number string `json:"number"`
+  Started string `json:"started"`
+}
 
 /////////////////////////////////////////// 
 
@@ -102,6 +107,8 @@ type BuildInfo struct {
   VcsRevision string`json:"vcsRevision"`
   VcsUrl string `json:"vcsUrl"`
   Modules []Module `json:"modules"`
+  BuildDependencies []BuildDep `json:"buildDependencies"`
+
 }
 
 func NewBuildInfo (biName string, biNumber string, biStart string, biDuration string, biPrincipal string) *BuildInfo {
@@ -155,6 +162,13 @@ func (bi * BuildInfo) setBuildDeps (arrDeps *AQLResult) {
     bi.Modules[0].Dependencies[i].Id =   (*arrDeps).Results[i].Name
   }
   
+}
+
+func (bi *BuildInfo) addChildBuild() {
+  bi.BuildDependencies = make([]BuildDep, 1)
+  bi.BuildDependencies[0].Name = "rpm_build_info" 
+  bi.BuildDependencies[0].Number = "1" 
+  bi.BuildDependencies[0].Started = "2019-05-29T18:33:25.712+0200"
 }
 
 
@@ -290,6 +304,9 @@ func (bic *buildInfoCreator) generateBuildInfo() {
   if bic.deps != "" {
     myBuild.setBuildDeps(&arrDeps) 
   }
+
+  myBuild.addChildBuild() 
+
 //  myBuild.print()
 
   buildinfo_json, _ := json.MarshalIndent(myBuild, "", " ")
@@ -386,6 +403,7 @@ func buildAQLDeps(deps string) string {
   aql += "]}).include(\"sha256\",\"actual_sha1\",\"actual_md5\",\"name\")"
   return aql
 }
+
 
 /////////////////////////////////////////// 
 
