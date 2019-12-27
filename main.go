@@ -15,6 +15,9 @@ import (
   "github.com/jfrog/jfrog-client-go/artifactory/services"
   utils "github.com/jfrog/jfrog-client-go/artifactory/services/utils"
   "github.com/jfrog/jfrog-client-go/artifactory/auth"
+//  "github.com/jfrog/jfrog-client-go/artifactory/buildinfo"
+  custom "github.com/cyan21/build-info-creator/buildinfo"
+  "github.com/cyan21/build-info-creator/result"
 )
 
 
@@ -22,180 +25,6 @@ const FULL_AQL4DOCKER string = "items.find({'path': { '$match' : 'IMAGE_PATH'}, 
  
 const AQL4DOCKER string = "{'path': { '$match' : 'IMAGE_PATH'}, 'type':'file'}"
 const TIMESTAMP_FORMAT string = "2006-01-02T15:04:05.000Z07:00"
-
-///// AQL 
-
-type Property struct {
-  Key string
-  Value string
-}
-
-type Result struct {
-  Name string 
-  Sha256 string
-  Actual_sha1 string
-  Actual_md5 string
-//  properties []Property
-}
-
-type AQLResult struct {
-  Results []Result
-}
-
-type BuildResult struct {
-  BuildName string  `json:"build.name"`
-  BuildNumber string `json:"build.number"`
-  BuildCreated string `json:"build.created"`
-}
-
-type AQLBuildResult struct {
-  Results []BuildResult
-}
-
-///// BuildInfo
-
-type Module struct {
-  Id string `json:"id"`
-  Artifacts []Artifact `json:"artifacts"`
-  Dependencies []Dependency `json:"dependencies"`
-} 
-
-type BuildInfoProperty struct {
-  Name string `json:"build.name"`
-  Number string `json:"build.number"`
-  Timestamp string `json:"build.timestamp"`
-
-}
-
-type Artifact struct {
-  Name string `json:"name"`
-  Sha256 string `json:"sha256"`
-  Sha1 string `json:"sha1"`
-  Md5 string  `json:"md5"`
-  Properties BuildInfoProperty `json:"properties"`
-}
-
-type Dependency struct {
-  Id string `json:"id"`
-  Sha256 string `json:"sha256"`
-  Sha1 string `json:"sha1"`
-  Md5 string  `json:"md5"`
-}
-
-type BuildAgentInfo struct {
-  name string 
-  version string
-}
-
-type VcsInfo struct {
-  url string 
-  revision string
-}
-
-type BuildDep struct {
-  Name string `json:"name"`
-  Number string `json:"number"`
-  Started string `json:"started"`
-}
-
-/////////////////////////////////////////// 
-
-type BuildInfo struct {
-  Version string `json:"version"`
-  Name string `json:"name"`
-  Number string `json:"number"`
-  BuildType string `json:"type"`
-  BuildAgent BuildAgentInfo `json:"buildAgent"`
-  Agent BuildAgentInfo`json:"agent"`
-  Started string`json:"started"`
-  DurationMillis string`json:"durationMillis"`
-  Principal string`json:"principal"`
-  ArtifactoryPrincipal string`json:"artifactoryPrincipal"`
-  ArtifactoryPluginVersion string`json:"artifactoryPluginVersion"`
-  Url string`json:"url"`
-  Vcs []VcsInfo`json:"vcs"`
-  VcsRevision string`json:"vcsRevision"`
-  VcsUrl string `json:"vcsUrl"`
-  Modules []Module `json:"modules"`
-  BuildDependencies []BuildDep `json:"buildDependencies"`
-
-}
-
-func NewBuildInfo (biName string, biNumber string, biStart string, biDuration string, biPrincipal string) *BuildInfo {
-
-  bi := new(BuildInfo)
-  bi.Name = biName 
-  bi.Number = biNumber 
-
-//  fmt.Println("[NewBuildInfo] biStart: ", biStart)
-  bi.Started =  biStart 
-//  fmt.Println("[NewBuildInfo] bi.Started: ", bi.Started)
-  bi.DurationMillis = biDuration 
-  bi.Principal = biPrincipal 
-
-  // build info version
-  bi.Version = "1.0.1" 
-  bi.BuildType = "GENERIC" 
-  
-  return bi 
-}
-
-func (bi * BuildInfo) setModules (moduleName string, buildName string, buildNumber string, buildTimestamp string, arrRes *AQLResult) {
-
-  bi.Modules = make([]Module, 1)
-  bi.Modules[0].Id = moduleName 
-   
-//  fmt.Println("arrRes size: ", len((*arrRes).Results))
-  bi.Modules[0].Artifacts = make([]Artifact, len((*arrRes).Results))
-
-  i:= 0
-  startBi, _ := time.Parse(time.RFC3339, buildTimestamp)
-  epochMs := strconv.FormatInt(startBi.Unix()*1000, 10)
-
-  for _,res  := range arrRes.Results {
-    bi.Modules[0].Artifacts[i].Sha256 = res.Sha256 
-    bi.Modules[0].Artifacts[i].Sha1 = res.Actual_sha1 
-    bi.Modules[0].Artifacts[i].Md5 = res.Actual_md5 
-    bi.Modules[0].Artifacts[i].Name = res.Name
-    bi.Modules[0].Artifacts[i].Properties = BuildInfoProperty{buildName, buildNumber, epochMs }
-    i++
-  }
-}
-
-func (bi * BuildInfo) setBuildDeps (arrDeps *AQLResult) {
-
-  bi.Modules[0].Dependencies = make([]Dependency, len((*arrDeps).Results))
-  for i := 0; i < len((*arrDeps).Results); i++ {
-    bi.Modules[0].Dependencies[i].Sha256 = (*arrDeps).Results[i].Sha256 
-    bi.Modules[0].Dependencies[i].Sha1 =   (*arrDeps).Results[i].Actual_sha1 
-    bi.Modules[0].Dependencies[i].Md5 =    (*arrDeps).Results[i].Actual_md5 
-    bi.Modules[0].Dependencies[i].Id =   (*arrDeps).Results[i].Name
-  }
-  
-}
-
-func (bi *BuildInfo) addChildBuild(arrBuild * []BuildResult) {
-  bi.BuildDependencies = make([]BuildDep, len(*arrBuild))
-fmt.Println("len: ", len(*arrBuild),"; cap: ", cap(*arrBuild))
-
-  for i := 0; i < len(*arrBuild); i++ {
-    bi.BuildDependencies[i].Name = (*arrBuild)[i].BuildName 
-    bi.BuildDependencies[i].Number = (*arrBuild)[i].BuildNumber  
-    bi.BuildDependencies[i].Started = (*arrBuild)[i].BuildCreated
-  }
-}
-
-
-func (bi* BuildInfo) print() {
-
-  for _,res  := range bi.Modules[0].Artifacts {
-    fmt.Println("Artifact Name: ", res.Name)    
-    fmt.Println("\tsha256: ", res.Sha256)    
-    fmt.Println("\tsha1: ", res.Sha1)    
-    fmt.Println("\tmd5: ", res.Md5)    
-  }
-}
-/////////////////////////////////////////// 
 
 type buildInfoCreator struct {
   imageId string
@@ -217,27 +46,6 @@ func NewBuildInfoCreator(buildName string, buildNumber string, buildTimestamp st
   var err1 error
   var bic *buildInfoCreator 
   
-  // check env variable for connection to Artifactory
-  if os.Getenv("ART_URL") != "" && os.Getenv("ART_USER") != "" && os.Getenv("ART_PASS") != "" {  
-    bic = new(buildInfoCreator) 
-  } else {
-    fmt.Println("[ERROR] ART_URL, ART_USER, ART_PASS are required environment variables !")
-    os.Exit(2)
-  } 
-
-  //bic := new(buildInfoCreator) 
-  bic.artUrl = os.Getenv("ART_URL")
-  bic.artUser = os.Getenv("ART_USER")
-  bic.artPass =os.Getenv("ART_PASS")
-  bic.imageId = imageId 
-  bic.buildName = buildName 
-  bic.buildNumber = buildNumber 
-  bic.deps = deps
-  // expecting result of date --rfc-3339=seconds 
-  biTimestamp := buildTimestamp 
-  tmpTS, _ := time.Parse(time.RFC3339, strings.Replace(biTimestamp, " ", "T", -1))
-  bic.buildTimestamp = tmpTS.Format(TIMESTAMP_FORMAT)
-  
   // init log file
   file, _ := os.Create("./buildInfoCreator.log")
 
@@ -251,6 +59,24 @@ func NewBuildInfoCreator(buildName string, buildNumber string, buildTimestamp st
     log.SetLogger(log.NewLogger(log.INFO, file))
   }
 
+  // check env variable for connection to Artifactory
+  if os.Getenv("ART_URL") != "" && os.Getenv("ART_USER") != "" && os.Getenv("ART_PASS") != "" {  
+    bic = new(buildInfoCreator) 
+  } else {
+    log.Error("ART_URL, ART_USER, ART_PASS are required environment variables !")
+    os.Exit(2)
+  } 
+
+  //bic := new(buildInfoCreator) 
+  bic.artUrl = os.Getenv("ART_URL")
+  bic.artUser = os.Getenv("ART_USER")
+  bic.artPass =os.Getenv("ART_PASS")
+  bic.imageId = imageId 
+  bic.buildName = buildName 
+  bic.buildNumber = buildNumber 
+  bic.deps = deps
+  
+
   // set up connection to Artifactory
   rtDetails := auth.NewArtifactoryDetails()
   rtDetails.SetUrl(os.Getenv("ART_URL"))
@@ -263,100 +89,137 @@ func NewBuildInfoCreator(buildName string, buildNumber string, buildTimestamp st
     Build()
 
   if err != nil {
-    log.Error("Issue while initializing the service config")
+    log.Error("Init service config failed with url: ", os.Getenv("ART_URL"),", user: ",os.Getenv("ART_USER"))
   }   
 
   bic.rtManager, err1 = artifactory.New(&rtDetails, serviceConfig)
 
   if err1 != nil {
-    fmt.Println("Issue while initializing the connection to Artifactory")
+    log.Error("Init Artifactory failed with url: ", os.Getenv("ART_URL"),", user: ",os.Getenv("ART_USER"))
   }   
    
   // run AQL query
   bic.aql = strings.Replace(strings.Replace(FULL_AQL4DOCKER, "IMAGE_PATH", bic.imageId, -1), "'", "\"", -1)
-  log.Debug("AQL query", bic.aql)
+  log.Debug("AQL query to retrieve docker image: ", bic.aql)
 
-  log.Debug("Init done")  
+  // expecting result of date --rfc-3339=seconds 
+  biTimestamp := buildTimestamp 
+  log.Debug("date formated to RFC3339 : ", biTimestamp)
+
+  tmpTS, _ := time.Parse(time.RFC3339, strings.Replace(biTimestamp, " ", "T", -1))
+  log.Debug("date formated to RFC3339 without 'T': ", tmpTS)
+
+  bic.buildTimestamp = tmpTS.Format(TIMESTAMP_FORMAT)
+  log.Debug("date formated for BuildInfo  ", bic.buildTimestamp)
 
   return bic 
 }
 
 func (bic *buildInfoCreator) generateBuildInfo() {
 
-  var arrRes, arrDeps AQLResult
+  var arrRes, arrDeps result.AQLResult
+
+  log.Info("Running AQL: ", bic.aql, " ...")
 
   // Get docker layers of an image
   toParse, aql_err := bic.rtManager.Aql(bic.aql)
 
   if aql_err != nil {
-    log.Error(aql_err)
+    log.Error("Failed executing AQL query :", bic.aql)
+    log.Error("Error message : ", aql_err)
   }
 
   err1 := json.Unmarshal(toParse, &arrRes)
 
   if err1 != nil {
-    log.Error("Issue while unmarshalling")
+    log.Error("Failed unmarshalling result of AQL query :", bic.aql )
+    log.Error("Error message : ", err1)
   } 
+
+  log.Info("AQL executed successfully")
+  log.Debug("AQL result stored into array: ", arrRes)
 
   if bic.deps != "" {
 
+    log.Info("Build Info dependencies found", bic.deps)
+    log.Info("Running AQL: ", bic.aql, " ...")
     toParse, aql_err = bic.rtManager.Aql(buildAQLDeps(bic.deps))
+
     if aql_err != nil {
-      log.Error(aql_err)
+      log.Error("Failed executing AQL query for dependencies")
+      log.Error("Error message : ", aql_err)
     }
 
     err1 = json.Unmarshal(toParse, &arrDeps)
 
     if err1 != nil {
-      log.Error("Issue while unmarshalling")
+      log.Error("Failed unmarshalling result of AQL query for deps")
+      log.Error("Error message : ", err1)
     } 
+
+    log.Info("AQL executed successfully")
+    log.Debug("Stored AQL result for deps into array: ", arrDeps)
   } 
 
-  myBuild := NewBuildInfo(bic.buildName, bic.buildNumber, bic.buildTimestamp, "360000", "yannc")
-  myBuild.setModules(bic.imageId, bic.buildName, bic.buildNumber, bic.buildTimestamp, &arrRes)
+  log.Info("Initializing Build Info")
+  myBuild := custom.NewBuildInfo(bic.buildName, bic.buildNumber, bic.buildTimestamp, "359999", "yannc")
+  myBuild.SetModules(bic.imageId, bic.buildName, bic.buildNumber, bic.buildTimestamp, &arrRes)
 
   if bic.deps != "" {
-    // add Build dependency
-    myBuild.setBuildDeps(&arrDeps) 
+    log.Info("Appending dependencies to Build Info ...")
+
+    myBuild.SetBuildDeps(&arrDeps) 
 
     // check if Build Dependency is the result of another Build Info
     aql_start := "builds.find({\"module.artifact.name\": \""
-    var aqlRes AQLBuildResult 
+    var aqlRes result.AQLBuildResult 
     arrBuildDeps := strings.Split(bic.deps, ",") 
-    aqlBuildResult := make([]BuildResult, 0)
+    aqlBuildResult := make([]result.BuildResult, 0)
 
     for i := 0; i < len(arrBuildDeps); i++ {
 
       aql := aql_start + arrBuildDeps[i] + "\"}).include(\"name\",\"number\",\"created\")"
+      log.Debug("Running AQL: ", aql, " ...")
+      
       toParse, aql_err = bic.rtManager.Aql(aql)
       err1 = json.Unmarshal(toParse, &aqlRes)
+ 
+      if err1 != nil {
+        log.Error("Failed unmarshalling result of AQL for deps")
+        log.Error("Error message : ", err1)
+      } 
+
+      log.Debug("Stored AQL result into array: ", aqlRes)
 
       if len(aqlRes.Results) > 0 {
-        fmt.Println(aqlRes.Results[0].BuildName) 
-        aqlBuildResult = append(aqlBuildResult, BuildResult{ aqlRes.Results[0].BuildName, aqlRes.Results[0].BuildNumber, aqlRes.Results[0].BuildCreated })
+        log.Debug("Build Name found:", aqlRes.Results[0].BuildName) 
+
+        aqlBuildResult = append(aqlBuildResult, result.BuildResult{ aqlRes.Results[0].BuildName, aqlRes.Results[0].BuildNumber, aqlRes.Results[0].BuildCreated })
       }
     } 
     
     if len(aqlBuildResult) > 0 {
-//      fmt.Println("found Build Info result")
-//      fmt.Println(aqlBuildResult)
-      myBuild.addChildBuild(&aqlBuildResult) 
+      log.Debug("Build Info dependencies: ", aqlBuildResult)
+      myBuild.AddChildBuild(&aqlBuildResult) 
     }
+
+    log.Info("Build Info dependencies added successfully")
   } 
 
 
 //  myBuild.print()
 
   buildinfo_json, _ := json.MarshalIndent(myBuild, "", " ")
-//  fmt.Println(buildinfo_json)
 
+  log.Info("Generating buildinfo.json ...")
   _ = ioutil.WriteFile("buildinfo.json", buildinfo_json, 0644)
+  log.Info("buildinfo.json successfully generated")
 
-  // set result in BuildInfo
-//  fmt.Println("imageID:",bic.imageId)
 }
 
 func (bic *buildInfoCreator) setBuildInfoProps() {
+
+  log.Info("Setting Build Info properties ... ")
 
   var buffer bytes.Buffer
   tmpTS, _ := time.Parse(time.RFC3339, bic.buildTimestamp)
@@ -372,17 +235,25 @@ func (bic *buildInfoCreator) setBuildInfoProps() {
 
   searchParams.Aql = utils.Aql{strings.Replace(strings.Replace(AQL4DOCKER, "'", "\"", -1), "IMAGE_PATH", bic.imageId, -1)}
 
+  log.Info("AQL: ", searchParams.Aql)
+
   resultItems, err := bic.rtManager.SearchFiles(searchParams)
 
   if err != nil {
-    fmt.Println(err)
+    log.Error("AQL raised an error")
+    log.Error("Error message : ", err)
   } 
 
   propsParams := services.NewPropsParams()
+
+  log.Debug("artifact to be tagged with props: ", resultItems)
   propsParams.Items = resultItems
+
+  log.Info("Properties to be added: ", buffer.String())
   propsParams.Props = buffer.String() 
 
   bic.rtManager.SetProps(propsParams)
+  log.Info("Set Build Info properties done")
 
 }
 
@@ -439,6 +310,9 @@ func buildAQLDeps(deps string) string {
 
   aql := strings.TrimSuffix(buffer.String(), ",")
   aql += "]}).include(\"sha256\",\"actual_sha1\",\"actual_md5\",\"name\")"
+   
+  log.Info("Generated AQL :", aql)
+
   return aql
 }
 
@@ -468,6 +342,6 @@ func main() {
 
   var bc = NewBuildInfoCreator(os.Args[1], os.Args[2], os.Args[3], os.Args[4], deps)
   bc.generateBuildInfo()
-  bc.setBuildInfoProps()
-  bc.publishBuildInfo()
+//  bc.setBuildInfoProps()
+//  bc.publishBuildInfo()
 }
