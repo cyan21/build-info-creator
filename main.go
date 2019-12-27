@@ -63,7 +63,7 @@ func NewBuildInfoCreator(buildName string, buildNumber string, buildTimestamp st
   if os.Getenv("ART_URL") != "" && os.Getenv("ART_USER") != "" && os.Getenv("ART_PASS") != "" {  
     bic = new(buildInfoCreator) 
   } else {
-    log.Error("ART_URL, ART_USER, ART_PASS are required environment variables !")
+    log.Error("[NewBuildInfoCreator] ART_URL, ART_USER, ART_PASS are required environment variables !")
     os.Exit(2)
   } 
 
@@ -89,28 +89,28 @@ func NewBuildInfoCreator(buildName string, buildNumber string, buildTimestamp st
     Build()
 
   if err != nil {
-    log.Error("Init service config failed with url: ", os.Getenv("ART_URL"),", user: ",os.Getenv("ART_USER"))
+    log.Error("[NewBuildInfoCreator] Init service config failed with url: ", os.Getenv("ART_URL"),", user: ",os.Getenv("ART_USER"))
   }   
 
   bic.rtManager, err1 = artifactory.New(&rtDetails, serviceConfig)
 
   if err1 != nil {
-    log.Error("Init Artifactory failed with url: ", os.Getenv("ART_URL"),", user: ",os.Getenv("ART_USER"))
+    log.Error("[NewBuildInfoCreator] Init Artifactory failed with url: ", os.Getenv("ART_URL"),", user: ",os.Getenv("ART_USER"))
   }   
    
   // run AQL query
   bic.aql = strings.Replace(strings.Replace(FULL_AQL4DOCKER, "IMAGE_PATH", bic.imageId, -1), "'", "\"", -1)
-  log.Debug("AQL query to retrieve docker image: ", bic.aql)
+  log.Debug("[NewBuildInfoCreator] AQL query to retrieve docker image: ", bic.aql)
 
   // expecting result of date --rfc-3339=seconds 
   biTimestamp := buildTimestamp 
-  log.Debug("date formated to RFC3339 : ", biTimestamp)
+  log.Debug("[NewBuildInfoCreator] date formated to RFC3339 : ", biTimestamp)
 
   tmpTS, _ := time.Parse(time.RFC3339, strings.Replace(biTimestamp, " ", "T", -1))
-  log.Debug("date formated to RFC3339 without 'T': ", tmpTS)
+  log.Debug("[NewBuildInfoCreator] date formated to RFC3339 without 'T': ", tmpTS)
 
   bic.buildTimestamp = tmpTS.Format(TIMESTAMP_FORMAT)
-  log.Debug("date formated for BuildInfo  ", bic.buildTimestamp)
+  log.Debug("[NewBuildInfoCreator] date formated for BuildInfo  ", bic.buildTimestamp)
 
   return bic 
 }
@@ -119,54 +119,54 @@ func (bic *buildInfoCreator) generateBuildInfo() {
 
   var arrRes, arrDeps result.AQLResult
 
-  log.Info("Running AQL: ", bic.aql, " ...")
+  log.Info("[generateBuildInfo] Running AQL: ", bic.aql, " ...")
 
   // Get docker layers of an image
   toParse, aql_err := bic.rtManager.Aql(bic.aql)
 
   if aql_err != nil {
-    log.Error("Failed executing AQL query :", bic.aql)
-    log.Error("Error message : ", aql_err)
+    log.Error("[generateBuildInfo] Failed executing AQL query :", bic.aql)
+    log.Error("[generateBuildInfo] Error message : ", aql_err)
   }
 
   err1 := json.Unmarshal(toParse, &arrRes)
 
   if err1 != nil {
-    log.Error("Failed unmarshalling result of AQL query :", bic.aql )
-    log.Error("Error message : ", err1)
+    log.Error("[generateBuildInfo] Failed unmarshalling result of AQL query :", bic.aql )
+    log.Error("[generateBuildInfo] Error message : ", err1)
   } 
 
-  log.Info("AQL executed successfully")
-  log.Debug("AQL result stored into array: ", arrRes)
+  log.Info("[generateBuildInfo] AQL executed successfully")
+  log.Debug("[generateBuildInfo] AQL result stored into array: ", arrRes)
 
   if bic.deps != "" {
 
-    log.Info("Build Info dependencies found", bic.deps)
-    log.Info("Running AQL: ", bic.aql, " ...")
+    log.Info("[generateBuildInfo] Build Info dependencies found", bic.deps)
+    log.Info("[generateBuildInfo] Running AQL: ", bic.aql, " ...")
     toParse, aql_err = bic.rtManager.Aql(buildAQLDeps(bic.deps))
 
     if aql_err != nil {
-      log.Error("Failed executing AQL query for dependencies")
-      log.Error("Error message : ", aql_err)
+      log.Error("[generateBuildInfo] Failed executing AQL query for dependencies")
+      log.Error("[generateBuildInfo] Error message : ", aql_err)
     }
 
     err1 = json.Unmarshal(toParse, &arrDeps)
 
     if err1 != nil {
-      log.Error("Failed unmarshalling result of AQL query for deps")
-      log.Error("Error message : ", err1)
+      log.Error("[generateBuildInfo] Failed unmarshalling result of AQL query for deps")
+      log.Error("[generateBuildInfo] Error message : ", err1)
     } 
 
-    log.Info("AQL executed successfully")
-    log.Debug("Stored AQL result for deps into array: ", arrDeps)
+    log.Info("[generateBuildInfo] AQL executed successfully")
+    log.Debug("[generateBuildInfo] Stored AQL result for deps into array: ", arrDeps)
   } 
 
-  log.Info("Initializing Build Info")
+  log.Info("[generateBuildInfo] Initializing Build Info")
   myBuild := custom.NewBuildInfo(bic.buildName, bic.buildNumber, bic.buildTimestamp, "359999", "yannc")
   myBuild.SetModules(bic.imageId, bic.buildName, bic.buildNumber, bic.buildTimestamp, &arrRes)
 
   if bic.deps != "" {
-    log.Info("Appending dependencies to Build Info ...")
+    log.Info("[generateBuildInfo] Appending dependencies to Build Info ...")
 
     myBuild.SetBuildDeps(&arrDeps) 
 
@@ -179,31 +179,31 @@ func (bic *buildInfoCreator) generateBuildInfo() {
     for i := 0; i < len(arrBuildDeps); i++ {
 
       aql := aql_start + arrBuildDeps[i] + "\"}).include(\"name\",\"number\",\"created\")"
-      log.Debug("Running AQL: ", aql, " ...")
+      log.Debug("[generateBuildInfo] Running AQL: ", aql, " ...")
       
       toParse, aql_err = bic.rtManager.Aql(aql)
       err1 = json.Unmarshal(toParse, &aqlRes)
  
       if err1 != nil {
-        log.Error("Failed unmarshalling result of AQL for deps")
-        log.Error("Error message : ", err1)
+        log.Error("[generateBuildInfo] Failed unmarshalling result of AQL for deps")
+        log.Error("[generateBuildInfo] Error message : ", err1)
       } 
 
-      log.Debug("Stored AQL result into array: ", aqlRes)
+      log.Debug("[generateBuildInfo] Stored AQL result into array: ", aqlRes)
 
       if len(aqlRes.Results) > 0 {
-        log.Debug("Build Name found:", aqlRes.Results[0].BuildName) 
+        log.Debug("[generateBuildInfo] Build Name found:", aqlRes.Results[0].BuildName) 
 
         aqlBuildResult = append(aqlBuildResult, result.BuildResult{ aqlRes.Results[0].BuildName, aqlRes.Results[0].BuildNumber, aqlRes.Results[0].BuildCreated })
       }
     } 
     
     if len(aqlBuildResult) > 0 {
-      log.Debug("Build Info dependencies: ", aqlBuildResult)
+      log.Debug("[generateBuildInfo] Build Info dependencies: ", aqlBuildResult)
       myBuild.AddChildBuild(&aqlBuildResult) 
     }
 
-    log.Info("Build Info dependencies added successfully")
+    log.Info("[generateBuildInfo] Build Info dependencies added successfully")
   } 
 
 
@@ -211,15 +211,15 @@ func (bic *buildInfoCreator) generateBuildInfo() {
 
   buildinfo_json, _ := json.MarshalIndent(myBuild, "", " ")
 
-  log.Info("Generating buildinfo.json ...")
+  log.Info("[generateBuildInfo] Generating buildinfo.json ...")
   _ = ioutil.WriteFile("buildinfo.json", buildinfo_json, 0644)
-  log.Info("buildinfo.json successfully generated")
+  log.Info("[generateBuildInfo] buildinfo.json successfully generated")
 
 }
 
 func (bic *buildInfoCreator) setBuildInfoProps() {
 
-  log.Info("Setting Build Info properties ... ")
+  log.Info("[setBuildInfoProps] Setting Build Info properties ... ")
 
   var buffer bytes.Buffer
   tmpTS, _ := time.Parse(time.RFC3339, bic.buildTimestamp)
@@ -235,25 +235,25 @@ func (bic *buildInfoCreator) setBuildInfoProps() {
 
   searchParams.Aql = utils.Aql{strings.Replace(strings.Replace(AQL4DOCKER, "'", "\"", -1), "IMAGE_PATH", bic.imageId, -1)}
 
-  log.Info("AQL: ", searchParams.Aql)
+  log.Info("[setBuildInfoProps] SAQL: ", searchParams.Aql)
 
   resultItems, err := bic.rtManager.SearchFiles(searchParams)
 
   if err != nil {
-    log.Error("AQL raised an error")
-    log.Error("Error message : ", err)
+    log.Error("[setBuildInfoProps] AQL raised an error")
+    log.Error("[setBuildInfoProps] Error message : ", err)
   } 
 
   propsParams := services.NewPropsParams()
 
-  log.Debug("artifact to be tagged with props: ", resultItems)
+  log.Debug("[setBuildInfoProps] artifact to be tagged with props: ", resultItems)
   propsParams.Items = resultItems
 
-  log.Info("Properties to be added: ", buffer.String())
+  log.Info("[setBuildInfoProps] Properties to be added: ", buffer.String())
   propsParams.Props = buffer.String() 
 
   bic.rtManager.SetProps(propsParams)
-  log.Info("Set Build Info properties done")
+  log.Info("[setBuildInfoProps] Set Build Info properties done")
 
 }
 
@@ -262,7 +262,7 @@ func (bic *buildInfoCreator) publishBuildInfo() {
   // reading build info file
   jsonFile, err := os.Open("buildinfo.json")
   if err != nil {
-    log.Error("couldn't opened buildinfo.json", err)
+    log.Error("[publishBuildInfo] couldn't opened buildinfo.json", err)
   }
   defer jsonFile.Close()
   byteValue, _ := ioutil.ReadAll(jsonFile)
@@ -272,19 +272,19 @@ func (bic *buildInfoCreator) publishBuildInfo() {
   req, err := http.NewRequest("PUT", bic.artUrl + "api/build", bytes.NewBuffer(byteValue))
 
   if err != nil {
-    log.Error("error occured when creating HTTP request", err)
+    log.Error("[publishBuildInfo] error occured when creating HTTP request", err)
   }
   req.Header.Set("Content-Type", "application/json")
   req.SetBasicAuth(bic.artUser, bic.artPass)
 
   resp, err := client.Do(req)
 
-  fmt.Println(resp)
+  log.Info("[publishBuildInfo] result publish Build Info: ", resp)
 
   if err != nil {
-    log.Error("error occured when sending HTTP request", err)
+    log.Error("[publishBuildInfo] error occured when sending HTTP request", err)
   } else {
-    log.Info("Published BuildInfo successfully :", resp.Status)
+    log.Info("[publishBuildInfo] Published BuildInfo successfully :", resp.Status)
   }
 }
 
@@ -311,7 +311,7 @@ func buildAQLDeps(deps string) string {
   aql := strings.TrimSuffix(buffer.String(), ",")
   aql += "]}).include(\"sha256\",\"actual_sha1\",\"actual_md5\",\"name\")"
    
-  log.Info("Generated AQL :", aql)
+  log.Info("[buildAQLDeps] Generated AQL :", aql)
 
   return aql
 }
