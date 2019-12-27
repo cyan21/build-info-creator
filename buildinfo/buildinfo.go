@@ -5,6 +5,7 @@ import (
   "strconv"
   "time"
   "github.com/cyan21/build-info-creator/result"
+  "github.com/jfrog/jfrog-client-go/utils/log"
 )
 
 type Module struct {
@@ -123,7 +124,7 @@ func (bi * BuildInfo) SetModules (moduleName string, buildName string, buildNumb
   bi.Modules = make([]Module, 1)
   bi.Modules[0].Id = moduleName 
    
-//  fmt.Println("arrRes size: ", len((*arrRes).Results))
+  log.Debug("[SetModules] Result size: ", len((*arrRes).Results))
   bi.Modules[0].Artifacts = make([]Artifact, len((*arrRes).Results))
 
   i:= 0
@@ -154,7 +155,7 @@ func (bi * BuildInfo) SetBuildDeps (arrDeps *result.AQLResult) {
 
 func (bi *BuildInfo) AddChildBuild(arrBuild * []result.BuildResult) {
   bi.BuildDependencies = make([]BuildDep, len(*arrBuild))
-fmt.Println("len: ", len(*arrBuild),"; cap: ", cap(*arrBuild))
+  log.Debug("[AddChildBuild] len: ", len(*arrBuild),"; cap: ", cap(*arrBuild))
 
   for i := 0; i < len(*arrBuild); i++ {
     bi.BuildDependencies[i].Name = (*arrBuild)[i].BuildName 
